@@ -78,7 +78,7 @@ def save_user_thread_id(user_id, thread_id):
         json.dump(data, f)
 
 # Function to create a thread and interact with the assistant
-def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
+def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_call):
     assistant_id = get_assistant_id(cat_bot_id)
     print(assistant_id)
     if not assistant_id:
@@ -111,17 +111,23 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
     run = client.beta.threads.runs.create_and_poll(
         thread_id=thread_id if thread_id else thread.id, assistant_id=assistant_id
     )
+
     messages = list(client.beta.threads.messages.list(thread_id=thread_id if thread_id else thread.id, run_id=run.id))
     print("MESSAGES:", messages)
     message_content = messages[-1].content[0].text.value
     print("MESSAGE_CONTENT:", message_content)
-    parsed_value = json.loads(message_content)
-    # Access the "Topic" and "Response"
-    topic = parsed_value.get("Topic")
-    response = parsed_value.get("Response")
-    highlights = parsed_value.get("Highlights")
 
-    return topic, response, highlights
+    if (api_call == "assistant"):
+        parsed_value = json.loads(message_content)
+        # Access the "Topic" and "Response"
+        topic = parsed_value.get("Topic")
+        response = parsed_value.get("Response")
+        highlights = parsed_value.get("Highlights")
+
+        return topic, response, highlights
+    else:
+        return message_content
+    
 
 def generateAudio(textToAudio):
     audioResponse = client.audio.speech.create(
@@ -152,7 +158,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
     topic, response, highlights = interact_with_assistant(
-        user_id, cat_bot_id, user_message, user_info
+        user_id, cat_bot_id, user_message, user_info, "assistant"
     )
     return {"topic": topic, "response": response, "highlights": highlights}
 
@@ -164,7 +170,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
     user_message = "Greet the user based on the follwoing Background Information:"
 
-    topic, response, highlights = interact_with_assistant(
-        user_id, cat_bot_id, user_message, user_info
+    response = interact_with_assistant(
+        user_id, cat_bot_id, user_message, user_info, "intro"
     )
-    return {"topic": topic, "response": response, "highlights": highlights}
+    return {"response": response}
