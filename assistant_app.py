@@ -30,20 +30,10 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 speech_file_path = "output.mp3"
 
 # Path to store the assistant ID
-ASSISTANT_ID_FILE = "assistant_id.json"
+ASSISTANT_ID_FILE = "assistant_ids.json"
 
 # Path to store user thread IDs
 USER_THREADS_FILE = "user_threads.json"
-
-# CAT-specific instructions
-CAT_PROMPTS = {
-    "CAT_prompt_control": "Control",
-    "CAT_prompt_approxmiation": "Adjust your language style in your response so that it matches the USER INFORMATION's tone, sentence query, choice of expressions and words, and level of formality/casualness; use verbal mimicry.",
-    "CAT_prompt_interpretability": "Based on how familiar it seems the user is with clinical trials and health, adjust the response such that it is clear and easily understandable; define any technical/medical jargon words specific to clinical trials; use easy to understand language and simple phrasing; use simple metaphors and analogies if possible.",
-    "CAT_prompt_interpersonalcontrol": "Assume the role of a peer to give more power to the user; Empower the user to take responsibility of their own health; solicit user's input to guide the direction of the conversation.",
-    "CAT_prompt_discoursemanagement": "Use backchannels/supportive phrases; Encourage the user by complimenting their question or re-summarizing their question to show you're listening and interested; suggesting related open-ended topics the user can ask.",
-    "CAT_prompt_emotionalexpression": "Incorporate emotional cues or expressions in your response to reflect empathy, reassurance, and/or genuine support"
-}
 
 SAMPLE_USER_INFO_Q1 = "My main concern is trying to figure out what I should do about this breast cancer. It's all so overwhelming, and I just want to make sure I'm doing the right thing to get better. My goal is to beat this thing and keep being there for my family and my students."
 SAMPLE_USER_INFO_Q2 = "I usually talk to my husband first and then my daughters. He helps me understand things better and supports me through it all. Sometimes I ask my friends who've been through similar things for advice or look things up online."
@@ -57,11 +47,11 @@ class InteractionRequest(BaseModel):
     user_info: str
 
 # Function to get the saved assistant ID
-def get_assistant_id():
+def get_assistant_id(cat_bot_id):
     try:
         with open(ASSISTANT_ID_FILE, "r") as f:
             data = json.load(f)
-            return data["assistant_id"]
+            return data[cat_bot_id]
     except FileNotFoundError:
         return None
 
@@ -88,23 +78,13 @@ def save_user_thread_id(user_id, thread_id):
         json.dump(data, f)
 
 # Function to create a thread and interact with the assistant
-def interact_with_assistant(user_id, user_message, language_style, user_info):
-    assistant_id = get_assistant_id()
+def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
+    assistant_id = get_assistant_id(cat_bot_id)
+    print(assistant_id)
     if not assistant_id:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
-    
-    user_specific_instructions = (
-        f"INSTRUCTIONS:\n{language_style}\n\nAlso, use and explicitly refer to the USER INFORMATION in your response:\nUSER INFORMATION:\n{user_info}"
-    )
-    structure_instructions = (
-        "Keep your response to 75 words or less. Finally, categorize the User's query as relating to one of the following topics, providing only the number: "
-        "(1) Safety in Clinical Trials, (2) Understanding and Comfort with the Clinical Trial Process, "
-        "(3) Logistical, Time, and Financial Barriers to Participation, (4) Risks and Benefits of Clinical Trials, "
-        "(5) Awareness and Information Accessibility. If none of them, categorize as (0). Structure your response as a JSON where the keys are Topic and Response, "
-        "and the values are as follows: For the Topic key, provide the numerical categorization. For the Response key, provide the response text you generated to answer the user's query."
-    )
-    # combined_prompt = f"User: {user_message}\n\nBackground Information About Me:{user_info}"
-    combined_prompt = f"User: {user_message}\n\nBackground Information About Me: {user_info}"
+
+    combined_prompt = f"User: {user_message}\nBackground Information About Me: {user_info}"
 
     print("COMBINED PROMPT:", combined_prompt)
     
@@ -139,8 +119,9 @@ def interact_with_assistant(user_id, user_message, language_style, user_info):
     # Access the "Topic" and "Response"
     topic = parsed_value.get("Topic")
     response = parsed_value.get("Response")
+    highlights = parsed_value.get("Highlights")
 
-    return topic, response
+    return topic, response, highlights
 
 def generateAudio(textToAudio):
     audioResponse = client.audio.speech.create(
@@ -166,24 +147,24 @@ async def root():
 async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     user_id = data['user_id']
+    cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
-    language_style = CAT_PROMPTS["CAT_prompt_approxmiation"]
     user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
-    topic, response = interact_with_assistant(
-        user_id, user_message, language_style, user_info
+    topic, response, highlights = interact_with_assistant(
+        user_id, cat_bot_id, user_message, user_info
     )
-    return {"topic": topic, "response": response}
+    return {"topic": topic, "response": response, "highlights": highlights}
 
 @app.post("/api/intro")
 async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     user_id = data['user_id']
-    language_style = CAT_PROMPTS["CAT_prompt_approxmiation"]
+    cat_bot_id = data['cat_bot_id']
     user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
-    user_message = "Greet the user based on their information in USER INFORMATION. Adjust your language based on the LANGUAGE STYLE."
+    user_message = "Greet the user based on the follwoing Background Information:"
 
-    topic, response = interact_with_assistant(
-        user_id, user_message, language_style, user_info
+    topic, response, highlights = interact_with_assistant(
+        user_id, cat_bot_id, user_message, user_info
     )
-    return {"topic": topic, "response": response}
+    return {"topic": topic, "response": response, "highlights": highlights}
