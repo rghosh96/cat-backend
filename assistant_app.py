@@ -5,6 +5,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
+from pydantic import BaseModel
+import json
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -27,32 +29,16 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 speech_file_path = "output.mp3"
 
-GPT_MODEL = "gpt-4-turbo"
+# Path to store the assistant ID
+ASSISTANT_ID_FILE = "assistant_id.json"
 
-# upload files & add to vector store
-# Create a vector store caled "CT DATA"
-vector_store = client.beta.vector_stores.create(name="CT Data")
- 
-# Ready the files for upload to OpenAI
-file_paths = ["clinical_trials_information.pdf"]
-file_streams = [open(path, "rb") for path in file_paths]
- 
-# Use the upload and poll SDK helper to upload the files, add them to the vector store,
-# and poll the status of the file batch for completion.
-file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
-  vector_store_id=vector_store.id, files=file_streams
-)
- 
-# You can print the status and the file counts of the batch to see the result of this operation.
-print(file_batch.status)
-print(file_batch.file_counts)
-
-assistant = None
+# Path to store user thread IDs
+USER_THREADS_FILE = "user_threads.json"
 
 # CAT-specific instructions
 CAT_PROMPTS = {
     "CAT_prompt_control": "Control",
-    "CAT_prompt_approxmiation": "Adjust your language style in your response so that it matches the User Answer's tone, sentence query, choice of expressions and words, and level of formality/casualness; use verbal mimicry.",
+    "CAT_prompt_approxmiation": "Adjust your language style in your response so that it matches the USER INFORMATION's tone, sentence query, choice of expressions and words, and level of formality/casualness; use verbal mimicry.",
     "CAT_prompt_interpretability": "Based on how familiar it seems the user is with clinical trials and health, adjust the response such that it is clear and easily understandable; define any technical/medical jargon words specific to clinical trials; use easy to understand language and simple phrasing; use simple metaphors and analogies if possible.",
     "CAT_prompt_interpersonalcontrol": "Assume the role of a peer to give more power to the user; Empower the user to take responsibility of their own health; solicit user's input to guide the direction of the conversation.",
     "CAT_prompt_discoursemanagement": "Use backchannels/supportive phrases; Encourage the user by complimenting their question or re-summarizing their question to show you're listening and interested; suggesting related open-ended topics the user can ask.",
@@ -64,22 +50,97 @@ SAMPLE_USER_INFO_Q2 = "I usually talk to my husband first and then my daughters.
 SAMPLE_USER_INFO_Q3 = "I guess I would consider it if it seemed like it could help me. But honestly, I'd be pretty skeptical. I'd want to know exactly what they're testing and what the risks are. And I'd want to make sure I'm not just being used as a guinea pig. But if it seemed like it could offer me some hope or a chance at better treatment, I might be willing to give it a shot."
 SAMPLE_USER_INFO_Q4 = "I might not want to do it if I felt like I was being pressured into it or if I didn't trust the people running the trial. And if I didn't really understand what they were asking me to do or what the potential risks were, that would definitely make me hesitant. I just want to make sure I'm making the best decisions for myself and my family."
 
-def initializeAssistantAPI(cat_prompt, user_info):
-    global assistant
-    gpt_prompt = "Use the following USER INFORMATION from a Q & A about the user to: (1) extract relevant information about the user to give a more specific answer and explicitly refer to the specific information about the user," + CAT_PROMPTS[cat_prompt] + "\n\nUSER INFORMATION:\n" + user_info + "\n\nUse the uploaded file to answer the user's questions. Otherwise, say 'I don't know.' Keep your response to 75 words or less."
-    print(gpt_prompt)
+# Data model for the request
+class InteractionRequest(BaseModel):
+    message: str
+    language_style: str
+    user_info: str
 
-    assistant = client.beta.assistants.create(
-        name="Accommodative Virtual Human for Clinical Trials Education",
-        instructions=gpt_prompt,
-        model=GPT_MODEL,
-        tools=[{"type": "file_search"}],
-    )
+# Function to get the saved assistant ID
+def get_assistant_id():
+    try:
+        with open(ASSISTANT_ID_FILE, "r") as f:
+            data = json.load(f)
+            return data["assistant_id"]
+    except FileNotFoundError:
+        return None
 
-    assistant = client.beta.assistants.update(
-        assistant_id=assistant.id,
-        tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
+# Function to get the user's thread ID
+def get_user_thread_id(user_id):
+    try:
+        with open(USER_THREADS_FILE, "r") as f:
+            data = json.load(f)
+            return data.get(user_id)
+    except FileNotFoundError:
+        return None
+
+# Function to save the user's thread ID
+def save_user_thread_id(user_id, thread_id):
+    try:
+        with open(USER_THREADS_FILE, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {}
+
+    data[user_id] = thread_id
+
+    with open(USER_THREADS_FILE, "w") as f:
+        json.dump(data, f)
+
+# Function to create a thread and interact with the assistant
+def interact_with_assistant(user_id, user_message, language_style, user_info):
+    assistant_id = get_assistant_id()
+    if not assistant_id:
+        raise HTTPException(status_code=500, detail="Assistant not initialized")
+    
+    user_specific_instructions = (
+        f"INSTRUCTIONS:\n{language_style}\n\nAlso, use and explicitly refer to the USER INFORMATION in your response:\nUSER INFORMATION:\n{user_info}"
     )
+    structure_instructions = (
+        "Keep your response to 75 words or less. Finally, categorize the User's query as relating to one of the following topics, providing only the number: "
+        "(1) Safety in Clinical Trials, (2) Understanding and Comfort with the Clinical Trial Process, "
+        "(3) Logistical, Time, and Financial Barriers to Participation, (4) Risks and Benefits of Clinical Trials, "
+        "(5) Awareness and Information Accessibility. If none of them, categorize as (0). Structure your response as a JSON where the keys are Topic and Response, "
+        "and the values are as follows: For the Topic key, provide the numerical categorization. For the Response key, provide the response text you generated to answer the user's query."
+    )
+    # combined_prompt = f"User: {user_message}\n\nBackground Information About Me:{user_info}"
+    combined_prompt = f"User: {user_message}\n\nBackground Information About Me: {user_info}"
+
+    print("COMBINED PROMPT:", combined_prompt)
+    
+    thread_id = get_user_thread_id(user_id)
+    if thread_id:
+        # Retrieve the existing thread and append the new message
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=combined_prompt
+        )
+    else:
+        # Create a new thread
+        thread = client.beta.threads.create(
+            messages=[
+                 {
+                    "role": "user",
+                    "content": combined_prompt,
+                }
+            ]
+        )
+        save_user_thread_id(user_id, thread.id)
+    
+    run = client.beta.threads.runs.create_and_poll(
+        thread_id=thread_id if thread_id else thread.id, assistant_id=assistant_id
+    )
+    messages = list(client.beta.threads.messages.list(thread_id=thread_id if thread_id else thread.id, run_id=run.id))
+    print("MESSAGES:", messages)
+    message_content = messages[-1].content[0].text.value
+    print("MESSAGE_CONTENT:", message_content)
+    parsed_value = json.loads(message_content)
+    # Access the "Topic" and "Response"
+    topic = parsed_value.get("Topic")
+    response = parsed_value.get("Response")
+
+    return topic, response
 
 def generateAudio(textToAudio):
     audioResponse = client.audio.speech.create(
@@ -101,42 +162,28 @@ def generateAudio(textToAudio):
 async def root():
     return {"message": "Hello World"}
 
-@app.post('/api/assistant')
-async def chatbot(request: Request, background_tasks: BackgroundTasks):
-    sample_user_info = SAMPLE_USER_INFO_Q1 + "\n" + SAMPLE_USER_INFO_Q2 + "\n" + SAMPLE_USER_INFO_Q3 + "\n" + SAMPLE_USER_INFO_Q4
-    sample_cat_prompt = "CAT_prompt_approxmiation"
-    initializeAssistantAPI(sample_cat_prompt, sample_user_info)
-
+@app.post("/api/assistant")
+async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
-    print(data)
+    user_id = data['user_id']
     user_message = data['user_message']
-    # Create a thread and attach the file to the message
-    thread = client.beta.threads.create(
-        messages=[
-            {
-            "role": "user",
-            "content": user_message,
-            }
-        ]
+    language_style = CAT_PROMPTS["CAT_prompt_approxmiation"]
+    user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
+
+    topic, response = interact_with_assistant(
+        user_id, user_message, language_style, user_info
     )
-    # Use the create and poll SDK helper to create a run and poll the status of
-    # the run until it's in a terminal state.
-    run = client.beta.threads.runs.create_and_poll(
-        thread_id=thread.id, assistant_id=assistant.id
+    return {"topic": topic, "response": response}
+
+@app.post("/api/intro")
+async def interact(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    user_id = data['user_id']
+    language_style = CAT_PROMPTS["CAT_prompt_approxmiation"]
+    user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
+    user_message = "Greet the user based on their information in USER INFORMATION. Adjust your language based on the LANGUAGE STYLE."
+
+    topic, response = interact_with_assistant(
+        user_id, user_message, language_style, user_info
     )
-
-    messages = list(client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id))
-
-    message_content = messages[0].content[0].text
-    annotations = message_content.annotations
-    citations = []
-    for index, annotation in enumerate(annotations):
-        message_content.value = message_content.value.replace(annotation.text, f"[{index}]")
-        if file_citation := getattr(annotation, "file_citation", None):
-            cited_file = client.files.retrieve(file_citation.file_id)
-            citations.append(f"[{index}] {cited_file.filename}")
-
-    print(message_content.value)
-    print("\n".join(citations))
-    
-    return message_content.value
+    return {"topic": topic, "response": response}
