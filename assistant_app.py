@@ -8,7 +8,7 @@ import numpy as np
 from pydantic import BaseModel
 import json
 from fastapi.middleware.cors import CORSMiddleware
-
+import base64
 
 app = FastAPI()
 
@@ -48,6 +48,7 @@ class InteractionRequest(BaseModel):
 
 # Function to get the saved assistant ID
 def get_assistant_id(cat_bot_id):
+    print(cat_bot_id)
     try:
         with open(ASSISTANT_ID_FILE, "r") as f:
             data = json.load(f)
@@ -80,6 +81,7 @@ def save_user_thread_id(user_id, thread_id):
 # Function to create a thread and interact with the assistant
 def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_call):
     assistant_id = get_assistant_id(cat_bot_id)
+    print(api_call)
     print(assistant_id)
     if not assistant_id:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
@@ -117,16 +119,15 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_ca
     message_content = messages[-1].content[0].text.value
     print("MESSAGE_CONTENT:", message_content)
 
-    if (api_call == "assistant"):
-        parsed_value = json.loads(message_content)
-        # Access the "Topic" and "Response"
-        topic = parsed_value.get("Topic")
-        response = parsed_value.get("Response")
-        highlights = parsed_value.get("Highlights")
+    parsed_value = json.loads(message_content)
+    # Access the "Topic" and "Response"
+    topic = parsed_value.get("Topic")
+    response = parsed_value.get("Response")
 
-        return topic, response, highlights
+    if (api_call == "assistant"):
+        return topic, response
     else:
-        return message_content
+        return response
     
 
 def generateAudio(textToAudio):
@@ -155,22 +156,46 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     user_id = data['user_id']
     cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
-    user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
+    user_info = data['user_info']
+    if cat_bot_id == "control_assistant_id":
+        user_info = ""
+    # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
-    topic, response, highlights = interact_with_assistant(
+    topic, response = interact_with_assistant(
         user_id, cat_bot_id, user_message, user_info, "assistant"
     )
-    return {"topic": topic, "response": response, "highlights": highlights}
+
+    audio_response = generateAudio(response)
+    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    # audio_data_url = "boop"
+
+    return {"topic": topic, "response": response, "audio": audio_data_url}
 
 @app.post("/api/intro")
 async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     user_id = data['user_id']
     cat_bot_id = data['cat_bot_id']
-    user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
-    user_message = "Greet the user based on the follwoing Background Information:"
+    user_info = data['user_info']
+    # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
-    response = interact_with_assistant(
-        user_id, cat_bot_id, user_message, user_info, "intro"
+    responseControl = interact_with_assistant(
+        user_id, cat_bot_id,  "Introduce yourself to the user and suggest 2-3 things you can talk about based on your PERSONA.", "", "intro"
     )
-    return {"response": response}
+
+    responseAccommodate = interact_with_assistant(
+        user_id, cat_bot_id, "Introduce yourself to the user and suggest 2-3 things you can talk about based on your PERSONA and the following Background Information:", user_info, "intro"
+    )
+
+    audioControl_response = generateAudio(responseControl)
+    audioControl_base64 = base64.b64encode(audioControl_response).decode('utf-8')
+    audioControl_data_url = f"data:audio/wav;base64,{audioControl_base64}"
+
+    audioAccommodatel_response = generateAudio(responseAccommodate)
+    audioAccommodate_base64 = base64.b64encode(audioAccommodatel_response).decode('utf-8')
+    audioAccommodate_data_url = f"data:audio/wav;base64,{audioAccommodate_base64}"
+    
+    # audio_data_url = "boop"
+
+    return {"responseControl": responseControl, "responseAccommodate": responseAccommodate, "audioControl": audioControl_data_url, "audioAccommodate": audioAccommodate_data_url}
