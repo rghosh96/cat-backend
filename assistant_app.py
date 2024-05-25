@@ -30,7 +30,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 speech_file_path = "output.mp3"
 
 # Path to store the assistant ID
-ASSISTANT_ID_FILE = "assistant_ids.json"
+ASSISTANT_ID_FILE = "assistant_ids_cat.json"
 
 # Path to store user thread IDs
 USER_THREADS_FILE = "user_threads.json"
