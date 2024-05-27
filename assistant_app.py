@@ -181,11 +181,11 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
     responseControl = interact_with_assistant(
-        user_id, cat_bot_id,  "Introduce yourself to the user and suggest 2-3 things you can talk about based on your PERSONA.", "", "intro"
+        user_id, "control_assistant_id",  "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA.", "", "intro"
     )
 
     responseAccommodate = interact_with_assistant(
-        user_id, cat_bot_id, "Introduce yourself to the user and suggest 2-3 things you can talk about based on your PERSONA and the following Background Information:", user_info, "intro"
+        user_id, cat_bot_id, "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA and the following Background Information:", user_info, "intro"
     )
 
     audioControl_response = generateAudio(responseControl)
