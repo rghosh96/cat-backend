@@ -123,11 +123,9 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_ca
     # Access the "Topic" and "Response"
     topic = parsed_value.get("Topic")
     response = parsed_value.get("Response")
+    highlights = parsed_value.get("Highlights")
 
-    if (api_call == "assistant"):
-        return topic, response
-    else:
-        return response
+    return topic, response, highlights
     
 
 def generateAudio(textToAudio):
@@ -161,7 +159,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
         user_info = ""
     # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
-    topic, response = interact_with_assistant(
+    topic, response, highlights = interact_with_assistant(
         user_id, cat_bot_id, user_message, user_info, "assistant"
     )
 
@@ -170,7 +168,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     audio_data_url = f"data:audio/wav;base64,{audio_base64}"
     # audio_data_url = "boop"
 
-    return {"topic": topic, "response": response, "audio": audio_data_url}
+    return {"topic": topic, "response": response, "highlights": highlights, "audio": audio_data_url}
 
 @app.post("/api/intro")
 async def interact(request: Request, background_tasks: BackgroundTasks):
@@ -180,11 +178,11 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     user_info = data['user_info']
     # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
 
-    responseControl = interact_with_assistant(
+    t, responseControl, h  = interact_with_assistant(
         user_id, "control_assistant_id",  "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA.", "", "intro"
     )
 
-    responseAccommodate = interact_with_assistant(
+    topic, responseAccommodate, highlights  = interact_with_assistant(
         user_id, cat_bot_id, "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA and the following Background Information:", user_info, "intro"
     )
 
@@ -198,4 +196,4 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     
     # audio_data_url = "boop"
 
-    return {"responseControl": responseControl, "responseAccommodate": responseAccommodate, "audioControl": audioControl_data_url, "audioAccommodate": audioAccommodate_data_url}
+    return {"responseControl": responseControl, "responseAccommodate": responseAccommodate, "highlights": highlights, "audioControl": audioControl_data_url, "audioAccommodate": audioAccommodate_data_url}
