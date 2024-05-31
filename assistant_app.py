@@ -35,11 +35,6 @@ ASSISTANT_ID_FILE = "assistant_ids_cat.json"
 # Path to store user thread IDs
 USER_THREADS_FILE = "user_threads.json"
 
-SAMPLE_USER_INFO_Q1 = "My main concern is trying to figure out what I should do about this breast cancer. It's all so overwhelming, and I just want to make sure I'm doing the right thing to get better. My goal is to beat this thing and keep being there for my family and my students."
-SAMPLE_USER_INFO_Q2 = "I usually talk to my husband first and then my daughters. He helps me understand things better and supports me through it all. Sometimes I ask my friends who've been through similar things for advice or look things up online."
-SAMPLE_USER_INFO_Q3 = "I guess I would consider it if it seemed like it could help me. But honestly, I'd be pretty skeptical. I'd want to know exactly what they're testing and what the risks are. And I'd want to make sure I'm not just being used as a guinea pig. But if it seemed like it could offer me some hope or a chance at better treatment, I might be willing to give it a shot."
-SAMPLE_USER_INFO_Q4 = "I might not want to do it if I felt like I was being pressured into it or if I didn't trust the people running the trial. And if I didn't really understand what they were asking me to do or what the potential risks were, that would definitely make me hesitant. I just want to make sure I'm making the best decisions for myself and my family."
-
 # Data model for the request
 class InteractionRequest(BaseModel):
     message: str
@@ -79,14 +74,16 @@ def save_user_thread_id(user_id, thread_id):
         json.dump(data, f)
 
 # Function to create a thread and interact with the assistant
-def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_call):
+def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
     assistant_id = get_assistant_id(cat_bot_id)
-    print(api_call)
     print(assistant_id)
     if not assistant_id:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
-    combined_prompt = f"User: {user_message}\nBackground Information About Me: {user_info}"
+    if cat_bot_id == "control_assistant_id":
+        combined_prompt = f"User: {user_message}"
+    else:
+        combined_prompt = f"User: {user_message}\nBackground Information About Me: {user_info}"
 
     print("COMBINED PROMPT:", combined_prompt)
     
@@ -123,9 +120,8 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, api_ca
     # Access the "Topic" and "Response"
     topic = parsed_value.get("Topic")
     response = parsed_value.get("Response")
-    highlights = parsed_value.get("Highlights")
 
-    return topic, response, highlights
+    return topic, response
     
 
 def generateAudio(textToAudio):
@@ -155,45 +151,14 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
     user_info = data['user_info']
-    if cat_bot_id == "control_assistant_id":
-        user_info = ""
-    # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
-
-    topic, response, highlights = interact_with_assistant(
-        user_id, cat_bot_id, user_message, user_info, "assistant"
+    topic, response = interact_with_assistant(
+        user_id, cat_bot_id, user_message, user_info
     )
 
     audio_response = generateAudio(response)
     audio_base64 = base64.b64encode(audio_response).decode('utf-8')
     audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+
     # audio_data_url = "boop"
 
-    return {"topic": topic, "response": response, "highlights": highlights, "audio": audio_data_url}
-
-@app.post("/api/intro")
-async def interact(request: Request, background_tasks: BackgroundTasks):
-    data = await request.json()
-    user_id = data['user_id']
-    cat_bot_id = data['cat_bot_id']
-    user_info = data['user_info']
-    # user_info = SAMPLE_USER_INFO_Q1 + " " + SAMPLE_USER_INFO_Q2 + " " + SAMPLE_USER_INFO_Q3 + " " + SAMPLE_USER_INFO_Q4
-
-    t, responseControl, h  = interact_with_assistant(
-        user_id, "control_assistant_id",  "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA.", "", "intro"
-    )
-
-    topic, responseAccommodate, highlights  = interact_with_assistant(
-        user_id, cat_bot_id, "Introduce yourself to the user and list 2-3 things you can talk about based on your PERSONA and the following Background Information:", user_info, "intro"
-    )
-
-    audioControl_response = generateAudio(responseControl)
-    audioControl_base64 = base64.b64encode(audioControl_response).decode('utf-8')
-    audioControl_data_url = f"data:audio/wav;base64,{audioControl_base64}"
-
-    audioAccommodatel_response = generateAudio(responseAccommodate)
-    audioAccommodate_base64 = base64.b64encode(audioAccommodatel_response).decode('utf-8')
-    audioAccommodate_data_url = f"data:audio/wav;base64,{audioAccommodate_base64}"
-    
-    # audio_data_url = "boop"
-
-    return {"responseControl": responseControl, "responseAccommodate": responseAccommodate, "highlights": highlights, "audioControl": audioControl_data_url, "audioAccommodate": audioAccommodate_data_url}
+    return {"topic": topic, "response": response, "audio": audio_data_url}
