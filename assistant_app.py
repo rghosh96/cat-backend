@@ -144,7 +144,7 @@ def generateAudio(textToAudio):
 async def root():
     return {"message": "Hello World"}
 
-@app.post("/api/assistant")
+@app.post("/api/cat/assistant")
 async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     user_id = data['user_id']
@@ -162,3 +162,16 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     # audio_data_url = "boop"
 
     return {"topic": topic, "response": response, "audio": audio_data_url}
+
+@app.post("/api/cat/voice")
+async def interact(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    agent_message = data['agent_message']
+
+    audio_response = generateAudio(agent_message)
+    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+
+    # audio_data_url = "boop"
+
+    return {"audio": audio_data_url}
