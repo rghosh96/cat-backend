@@ -74,7 +74,7 @@ def save_user_thread_id(user_id, thread_id):
         json.dump(data, f)
 
 # Function to create a thread and interact with the assistant
-def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
+def interact_with_assistant(user_id, cat_bot_id, user_message, user_info, comm_style, health_literacy):
     assistant_id = get_assistant_id(cat_bot_id)
     print(assistant_id)
     if not assistant_id:
@@ -82,6 +82,10 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, user_info):
 
     if cat_bot_id == "control_assistant_id":
         combined_prompt = f"User: {user_message}"
+    elif cat_bot_id == "approximation_assistant_id":
+        combined_prompt = f"User: {user_message}\nCOMMUNICATION STYLE: {comm_style}\n Background Information About Me: {user_info}"
+    elif cat_bot_id == "interpretability_assistant_id":
+        combined_prompt = f"User: {user_message}\n BRIEF Health Literacy Score: {health_literacy}\n Background Information About Me: {user_info}"
     else:
         combined_prompt = f"User: {user_message}\nBackground Information About Me: {user_info}"
 
@@ -151,15 +155,17 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
     user_info = data['user_info']
+    comm_style = data['comm_style']
+    health_literacy = data['health_literacy']
     topic, response = interact_with_assistant(
-        user_id, cat_bot_id, user_message, user_info
+        user_id, cat_bot_id, user_message, user_info, comm_style, health_literacy
     )
 
-    audio_response = generateAudio(response)
-    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
-    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    # audio_response = generateAudio(response)
+    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
 
-    # audio_data_url = "boop"
+    audio_data_url = "boop"
 
     return {"topic": topic, "response": response, "audio": audio_data_url}
 
@@ -168,10 +174,10 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     agent_message = data['agent_message']
 
-    audio_response = generateAudio(agent_message)
-    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
-    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    # audio_response = generateAudio(agent_message)
+    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
 
-    # audio_data_url = "boop"
+    audio_data_url = "boop"
 
     return {"audio": audio_data_url}
