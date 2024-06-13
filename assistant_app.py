@@ -161,15 +161,15 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
         user_id, cat_bot_id, user_message, user_info, comm_style, health_literacy
     )
 
-    print(comm_style)
-    print(health_literacy)
-    print(user_info)
+    # print(comm_style)
+    # print(health_literacy)
+    # print(user_info)
 
-    # audio_response = generateAudio(response)
-    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
-    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    audio_response = generateAudio(response)
+    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
 
-    audio_data_url = "boop"
+    # audio_data_url = "boop"
 
     return {"topic": topic, "response": response, "audio": audio_data_url}
 
@@ -177,11 +177,12 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
 async def interact(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     agent_message = data['agent_message']
+    print(agent_message)
 
-    # audio_response = generateAudio(agent_message)
-    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
-    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    audio_response = generateAudio(agent_message)
+    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
 
-    audio_data_url = "boop"
+    # audio_data_url = "boop"
 
     return {"audio": audio_data_url}
