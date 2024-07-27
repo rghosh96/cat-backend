@@ -154,6 +154,9 @@ def browse_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
     else:
         combined_prompt = f"User: {user_message}\n BRIEF SCORE: {health_literacy}\n"
     
+    print(cat_bot_id)
+    print(assistant_id)
+
     thread_id = get_user_thread_id(user_id, 1)
     if thread_id:
         # Retrieve the existing thread and append the new message
@@ -183,6 +186,8 @@ def browse_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
 
     cleaned_response_browse = re.sub(r'【.*?】', '', message_content)
     cleaned_response_browse.strip()  # Remove any leading/trailing whitespace
+
+    print(messages)
 
     return cleaned_response_browse
 
@@ -226,6 +231,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
 @app.post("/api/cat/browse")
 async def search(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
+    print(data)
     user_id = data['user_id']
     cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
