@@ -144,30 +144,30 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
     return topic, cleaned_response
 
 # Function to create a thread and search with the assistant
-def browse_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
-    assistant_id = get_assistant_id(cat_bot_id)
-    if not assistant_id:
+def browse_with_assistant(user_id_browse, cat_bot_id_browse, user_message_browse, health_literacy_browse):
+    assistant_id_browse = get_assistant_id(cat_bot_id_browse)
+    if not assistant_id_browse:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
-    if cat_bot_id == "ct_control_assistant_id":
-        combined_prompt = f"User: {user_message}"
+    if cat_bot_id_browse == "ct_control_assistant_id":
+        combined_prompt = f"User: {user_message_browse}"
     else:
-        combined_prompt = f"User: {user_message}\n BRIEF SCORE: {health_literacy}\n"
+        combined_prompt = f"User: {user_message_browse}\n BRIEF SCORE: {health_literacy_browse}\n"
     
-    print(cat_bot_id)
-    print(assistant_id)
+    print(cat_bot_id_browse)
+    print(assistant_id_browse)
 
-    thread_id = get_user_thread_id(user_id, 1)
-    if thread_id:
+    thread_id_browse = get_user_thread_id(user_id_browse, 1)
+    if thread_id_browse:
         # Retrieve the existing thread and append the new message
         client_rashi.beta.threads.messages.create(
-            thread_id=thread_id,
+            thread_id=thread_id_browse,
             role="user",
             content=combined_prompt
         )
     else:
         # Create a new thread
-        thread = client_rashi.beta.threads.create(
+        thread_browse = client_rashi.beta.threads.create(
             messages=[
                  {
                     "role": "user",
@@ -175,19 +175,19 @@ def browse_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
                 }
             ]
         )
-        save_user_thread_id(user_id, thread.id, 1)
+        save_user_thread_id(user_id_browse, thread_browse.id, 1)
     
-    run = client_rashi.beta.threads.runs.create_and_poll(
-        thread_id=thread_id if thread_id else thread.id, assistant_id=assistant_id
+    run_browse = client_rashi.beta.threads.runs.create_and_poll(
+        thread_id=thread_id_browse if thread_id_browse else thread_browse.id, assistant_id=assistant_id_browse
     )
 
-    messages = list(client_rashi.beta.threads.messages.list(thread_id=thread_id if thread_id else thread.id, run_id=run.id))
-    message_content = messages[-1].content[0].text.value
+    messages_browse = list(client_rashi.beta.threads.messages.list(thread_id=thread_id_browse if thread_id_browse else thread_browse.id, run_id=run_browse.id))
+    message_content_browse = messages_browse[-1].content[0].text.value
 
-    cleaned_response_browse = re.sub(r'【.*?】', '', message_content)
+    cleaned_response_browse = re.sub(r'【.*?】', '', message_content_browse)
     cleaned_response_browse.strip()  # Remove any leading/trailing whitespace
 
-    print(messages)
+    print(messages_browse)
 
     return cleaned_response_browse
 
