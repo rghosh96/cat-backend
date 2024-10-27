@@ -100,11 +100,11 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
     if not assistant_id:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
-    if cat_bot_id == "control_assistant_id":
+    if cat_bot_id == "control_assistantv2_id":
         combined_prompt = f"User: {user_message}"
     else:
         combined_prompt = f"User: {user_message}\n BRIEF SCORE: {health_literacy}\n"
-    
+    print(combined_prompt)
     thread_id = get_user_thread_id(user_id, 0)
     if thread_id:
         # Retrieve the existing thread and append the new message
@@ -129,8 +129,13 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
         thread_id=thread_id if thread_id else thread.id, assistant_id=assistant_id
     )
 
+    print("CREATED RUN")
+
+
     messages = list(client_rashi.beta.threads.messages.list(thread_id=thread_id if thread_id else thread.id, run_id=run.id))
     message_content = messages[-1].content[0].text.value
+    print("MESSAGES CONTENT", message_content)
+
     json_string = re.search(r'\{.*\}', message_content, re.DOTALL).group()
 
     parsed_value = json.loads(json_string)
@@ -187,8 +192,6 @@ def browse_with_assistant(user_id_browse, cat_bot_id_browse, user_message_browse
     cleaned_response_browse = re.sub(r'【.*?】', '', message_content_browse)
     cleaned_response_browse.strip()  # Remove any leading/trailing whitespace
 
-    print(messages_browse)
-
     return cleaned_response_browse
 
 def generateAudio(textToAudio):
@@ -218,6 +221,7 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     cat_bot_id = data['cat_bot_id']
     user_message = data['user_message']
     health_literacy = data['health_literacy']
+    print("IN API CALL")
     topic, response = interact_with_assistant(
         user_id, cat_bot_id, user_message, health_literacy
     )
