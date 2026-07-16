@@ -60,6 +60,7 @@ def get_assistant_id(cat_bot_id):
     try:
         with open(ASSISTANT_ID_FILE, "r") as f:
             data = json.load(f)
+            print(data)
             return data[cat_bot_id]
     except FileNotFoundError:
         return None
@@ -96,6 +97,7 @@ def save_user_thread_id(user_id, thread_id, type):
 
 # Function to create a thread and interact with the assistant
 def interact_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
+    print(cat_bot_id)
     assistant_id = get_assistant_id(cat_bot_id)
     if not assistant_id:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
@@ -147,6 +149,61 @@ def interact_with_assistant(user_id, cat_bot_id, user_message, health_literacy):
     cleaned_response.strip()  # Remove any leading/trailing whitespace
 
     return topic, cleaned_response
+
+# Function to create a thread and interact with the assistant
+def interact_with_assistant_v2(user_id, user_message):
+    assistant_id = get_assistant_id("v3_assistant")
+    if not assistant_id:
+        raise HTTPException(status_code=500, detail="Assistant not initialized")
+
+    combined_prompt = user_message
+    thread_id = get_user_thread_id(user_id, 0)
+    if thread_id:
+        # Retrieve the existing thread and append the new message
+        client_rashi.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=combined_prompt
+        )
+    else:
+        # Create a new thread
+        thread = client_rashi.beta.threads.create(
+            messages=[
+                 {
+                    "role": "user",
+                    "content": combined_prompt,
+                }
+            ]
+        )
+        save_user_thread_id(user_id, thread.id, 0)
+    
+    run = client_rashi.beta.threads.runs.create_and_poll(
+        thread_id=thread_id if thread_id else thread.id, assistant_id=assistant_id
+    )
+
+    print("CREATED RUN")
+
+
+    messages = list(client_rashi.beta.threads.messages.list(thread_id=thread_id if thread_id else thread.id, run_id=run.id))
+    message_content = messages[-1].content[0].text.value
+    print("MESSAGES CONTENT", message_content)
+
+    print(message_content)
+
+    json_string = re.search(r'\{.*\}', message_content, re.DOTALL).group()
+
+    parsed_value = json.loads(json_string)
+    # Access the "Topic" and "Response"
+    response1 = parsed_value.get("Response 1")
+    response2 = parsed_value.get("Response 2")
+
+    response1_cleaned = re.sub(r'【.*?】', '', response1)
+    response1_cleaned.strip()  # Remove any leading/trailing whitespace
+
+    response2_cleaned = re.sub(r'【.*?】', '', response2)
+    response2_cleaned.strip()  # Remove any leading/trailing whitespace
+
+    return response1_cleaned, response2_cleaned
 
 # Function to create a thread and search with the assistant
 def browse_with_assistant(user_id_browse, cat_bot_id_browse, user_message_browse, health_literacy_browse):
@@ -222,15 +279,33 @@ async def interact(request: Request, background_tasks: BackgroundTasks):
     user_message = data['user_message']
     health_literacy = data['health_literacy']
     print("IN API CALL")
+    print(cat_bot_id)
     topic, response = interact_with_assistant(
         user_id, cat_bot_id, user_message, health_literacy
     )
 
-    audio_response = generateAudio(response)
-    audio_base64 = base64.b64encode(audio_response).decode('utf-8')
-    audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+    # audio_response = generateAudio(response)
+    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
 
-    return {"topic": topic, "response": response, "audio": audio_data_url}
+    # return {"topic": topic, "response": response, "audio": audio_data_url}
+    return {"topic": topic, "response": response}
+
+@app.post("/api/cat/assistantv2")
+async def interactv2(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    user_id = data['user_id']
+    user_message = data['user_message']
+    print("IN API CALL")
+    response1, response2 = interact_with_assistant_v2(
+        user_id, user_message
+    )
+
+    # audio_response = generateAudio(response)
+    # audio_base64 = base64.b64encode(audio_response).decode('utf-8')
+    # audio_data_url = f"data:audio/wav;base64,{audio_base64}"
+
+    return {"response1": response1, "response2": response2}
 
 @app.post("/api/cat/browse")
 async def search(request: Request, background_tasks: BackgroundTasks):
